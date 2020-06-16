@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="growatt"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+	<!-- Sample Thing Type -->
+	<thing-type id="account">
+		<label>Growatt account</label>
+		<description>The growatt account the binding should use</description>
+
+		<channels>
+			<channel id="channel1" typeId="sample-channel" />
+		</channels>
+
+		<config-description>
+			<parameter type="text" required="true" name="username">
+				<label>The growatt username</label>
+				<description>The username used to login to the server.growatt.com website</description>
+			</parameter>
+			<parameter name="password" type="text" required="true">
+				<label>The growatt password</label>
+				<description>The password as used to login to the server.growatt.com website</description>
+				<context>password</context></parameter>
+			<parameter name="server" type="text">
+				<default>server.growatt.com</default>
+				<required>true</required>
+				<label>Server name</label>
+				<description>The dns name of the server hosting the open Growatt API.</description>
+				<context>network-address</context></parameter>
+		</config-description>
+
+	</thing-type>
+
+	<!-- Sample Channel Type -->
+	<channel-type id="sample-channel">
+		<item-type>growattItem</item-type>
+		<label>Growatt Binding Channel</label>
+		<description>Sample channel for Growatt Binding</description>
+	</channel-type>
+
+</thing:thing-descriptions>
