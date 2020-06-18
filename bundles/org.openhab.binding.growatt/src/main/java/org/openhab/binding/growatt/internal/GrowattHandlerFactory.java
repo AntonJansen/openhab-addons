@@ -12,13 +12,15 @@
  */
 package org.openhab.binding.growatt.internal;
 
-import static org.openhab.binding.growatt.internal.GrowattBindingConstants.THING_TYPE_SAMPLE;
+import static org.openhab.binding.growatt.internal.GrowattBindingConstants.*;
 
-import java.util.Collections;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Set;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.eclipse.smarthome.core.thing.Bridge;
 import org.eclipse.smarthome.core.thing.Thing;
 import org.eclipse.smarthome.core.thing.ThingTypeUID;
 import org.eclipse.smarthome.core.thing.binding.BaseThingHandlerFactory;
@@ -36,7 +38,8 @@ import org.osgi.service.component.annotations.Component;
 @Component(configurationPid = "binding.growatt", service = ThingHandlerFactory.class)
 public class GrowattHandlerFactory extends BaseThingHandlerFactory {
 
-    private static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Collections.singleton(THING_TYPE_SAMPLE);
+    private static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = new HashSet<ThingTypeUID>(
+            Arrays.asList(PLANT_TYPE, ACCOUNT_TYPE));
 
     @Override
     public boolean supportsThingType(ThingTypeUID thingTypeUID) {
@@ -47,8 +50,10 @@ public class GrowattHandlerFactory extends BaseThingHandlerFactory {
     protected @Nullable ThingHandler createHandler(Thing thing) {
         ThingTypeUID thingTypeUID = thing.getThingTypeUID();
 
-        if (THING_TYPE_SAMPLE.equals(thingTypeUID)) {
-            return new GrowattHandler(thing);
+        if (ACCOUNT_TYPE.equals(thingTypeUID)) {
+            return new AccountBridgeHandler((Bridge) thing);
+        } else if (PLANT_TYPE.equals(thingTypeUID)) {
+            return new PlantHandler(thing);
         }
 
         return null;

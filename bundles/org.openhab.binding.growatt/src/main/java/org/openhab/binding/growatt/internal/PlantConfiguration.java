@@ -15,12 +15,12 @@ package org.openhab.binding.growatt.internal;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
 /**
- * The {@link GrowattConfiguration} class contains fields mapping thing configuration parameters.
+ * The {@link PlantConfiguration} class contains fields mapping thing configuration parameters.
  *
  * @author Anton Jansen - Initial contribution
  */
 @NonNullByDefault
-public class GrowattConfiguration {
+public class PlantConfiguration {
 
     /**
      * Sample configuration parameter. Replace with your own.

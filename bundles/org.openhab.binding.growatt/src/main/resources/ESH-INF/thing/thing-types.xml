@@ -4,39 +4,47 @@
 	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
 	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
 
-	<!-- Sample Thing Type -->
-	<thing-type id="account">
-		<label>Growatt account</label>
-		<description>The growatt account the binding should use</description>
-
-		<channels>
-			<channel id="channel1" typeId="sample-channel" />
-		</channels>
-
+	<!--Account bridge definition-->
+	<bridge-type id="growattBridge">
+		<label>Growatt account bridge</label>
+		<description>The account used to act as a bridge towards the Growatt API</description>
+		<representation-property>email</representation-property>
 		<config-description>
-			<parameter type="text" required="true" name="username">
-				<label>The growatt username</label>
-				<description>The username used to login to the server.growatt.com website</description>
-			</parameter>
-			<parameter name="password" type="text" required="true">
-				<label>The growatt password</label>
-				<description>The password as used to login to the server.growatt.com website</description>
-				<context>password</context></parameter>
-			<parameter name="server" type="text">
-				<default>server.growatt.com</default>
+			<parameter name="username" type="text">
+				<label>Growatt username</label>
+				<description>The username used to login to the Growatt server</description>
+				<required>true</required></parameter>
+			<parameter name="password" type="text">
+				<context>password</context>
+				<label>Growatt password</label>
 				<required>true</required>
+				<description>The password of the Growatt user to connect to the Growatt server</description></parameter>
+			<parameter name="server" type="text">
+				<context>network-address</context>
+				<required>true</required>
+				<description>The network address of the server hosting the Growatt API</description>
 				<label>Server name</label>
-				<description>The dns name of the server hosting the open Growatt API.</description>
-				<context>network-address</context></parameter>
-		</config-description>
-
-	</thing-type>
-
-	<!-- Sample Channel Type -->
-	<channel-type id="sample-channel">
-		<item-type>growattItem</item-type>
-		<label>Growatt Binding Channel</label>
-		<description>Sample channel for Growatt Binding</description>
-	</channel-type>
+				<default>server.growatt.com</default></parameter></config-description>
+	</bridge-type><!--Plant item definition--><thing-type id="plant">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="growattBridge" />
+		</supported-bridge-type-refs>
+		<label>Plant</label>
+		<description>Represents a plant, i.e. a location where power is created and/or stored.</description>
+		<channels>
+			<channel typeId="Energy" id="currentPower">
+				<label>Current Power (kW)</label>
+				<description>Provides the current power in kilowatts of the plant</description></channel>
+			<channel typeId="Energy" id="totalEnergy">
+				<label>Cumlative power generation (kWh)</label>
+				<description>The cumulative power generation in kilo watt hours of the plant</description></channel>
+		</channels>
+		<properties>
+			<property name="plantId">0</property>
+			<property name="nameOfPlant">Unknown plant name</property>
+			<property name="country">Unknown country</property>
+		</properties>
+		<representation-property>plantId</representation-property>
+</thing-type>
 
 </thing:thing-descriptions>

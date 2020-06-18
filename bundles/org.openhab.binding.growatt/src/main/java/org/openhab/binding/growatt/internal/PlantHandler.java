@@ -26,24 +26,25 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The {@link GrowattHandler} is responsible for handling commands, which are
+ * The {@link PlantHandler} is responsible for handling commands, which are
  * sent to one of the channels.
  *
  * @author Anton Jansen - Initial contribution
  */
 @NonNullByDefault
-public class GrowattHandler extends BaseThingHandler {
+public class PlantHandler extends BaseThingHandler {
 
-    private final Logger logger = LoggerFactory.getLogger(GrowattHandler.class);
+    private final Logger logger = LoggerFactory.getLogger(PlantHandler.class);
 
-    private @Nullable GrowattConfiguration config;
+    private @Nullable PlantConfiguration config;
 
-    public GrowattHandler(Thing thing) {
+    public PlantHandler(Thing thing) {
         super(thing);
     }
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
+        logger.debug("handleCommand, channelUID: " + channelUID + " Command: " + command);
         if (CHANNEL_1.equals(channelUID.getId())) {
             if (command instanceof RefreshType) {
                 // TODO: handle data refresh
@@ -60,8 +61,8 @@ public class GrowattHandler extends BaseThingHandler {
 
     @Override
     public void initialize() {
-        // logger.debug("Start initializing!");
-        config = getConfigAs(GrowattConfiguration.class);
+        logger.debug("Start initializing!");
+        config = getConfigAs(PlantConfiguration.class);
 
         // TODO: Initialize the handler.
         // The framework requires you to return from this method quickly. Also, before leaving this method a thing
@@ -87,7 +88,7 @@ public class GrowattHandler extends BaseThingHandler {
             }
         });
 
-        // logger.debug("Finished initializing!");
+        logger.debug("Finished initializing!");
 
         // Note: When initialization can NOT be done set the status with more details for further
         // analysis. See also class ThingStatusDetail for all available status details.
