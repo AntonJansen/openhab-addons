@@ -8,7 +8,10 @@
 	<bridge-type id="account">
 		<label>Growatt account bridge</label>
 		<description>The account used to act as a bridge towards the Growatt API</description>
-		<representation-property>email</representation-property>
+		<properties>
+			<property name="userId">0</property>
+		</properties>
+		<representation-property>userId</representation-property>
 		<config-description>
 			<parameter name="username" type="text">
 				<label>Growatt username</label>

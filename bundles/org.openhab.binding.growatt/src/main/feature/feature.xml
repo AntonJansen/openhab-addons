@@ -4,9 +4,6 @@
 
     <feature name="openhab-binding-growatt" description="Growatt Binding" version="${project.version}">
         <feature>openhab-runtime-base</feature>
-        <bundle dependency="true">mvn:org.apache.httpcomponents/httpcore-osgi/4.4.10</bundle>
-        <bundle dependency="true">mvn:org.apache.httpcomponents/httpclient-osgi/4.5.8</bundle>    
-        <bundle dependency="true">mvn:commons-logging/commons-logging/1.2</bundle>    
         <bundle start-level="80">mvn:org.openhab.addons.bundles/org.openhab.binding.growatt/${project.version}</bundle>
                 
     </feature>

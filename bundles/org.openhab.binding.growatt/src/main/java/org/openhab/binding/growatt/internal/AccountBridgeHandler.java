@@ -1,35 +1,38 @@
 package org.openhab.binding.growatt.internal;
 
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 
-import org.apache.http.HttpEntity;
-import org.apache.http.NameValuePair;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.message.BasicNameValuePair;
-import org.apache.http.util.EntityUtils;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.eclipse.jdt.annotation.NonNull;
+import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.api.ContentResponse;
+import org.eclipse.jetty.client.util.FormContentProvider;
+import org.eclipse.jetty.util.Fields;
+import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.smarthome.config.core.status.ConfigStatusMessage;
 import org.eclipse.smarthome.core.thing.Bridge;
 import org.eclipse.smarthome.core.thing.ChannelUID;
 import org.eclipse.smarthome.core.thing.ThingStatus;
 import org.eclipse.smarthome.core.thing.binding.ConfigStatusBridgeHandler;
 import org.eclipse.smarthome.core.types.Command;
+import org.openhab.binding.growatt.internal.responsetypes.GenericResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
 public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
 
     private final Logger logger = LoggerFactory.getLogger(AccountBridgeHandler.class);
     private AccountBridgeConfig accountBridgeConfig = null;
+    private HttpClient httpClient = null;
+    private GsonBuilder gsonBuilder = null;
+    private Gson gson = null;
 
     public AccountBridgeHandler(Bridge bridge) {
         super(bridge);
@@ -39,54 +42,79 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
     @Override
     public void initialize() {
         logger.debug("Initializing account bridge handler.");
-        accountBridgeConfig = getConfigAs(AccountBridgeConfig.class);
         updateStatus(ThingStatus.UNKNOWN);
+        accountBridgeConfig = getConfigAs(AccountBridgeConfig.class);
+        httpClient = new HttpClient(new SslContextFactory(true));
+        gsonBuilder = new GsonBuilder();
+        gsonBuilder.setPrettyPrinting();
+        gson = gsonBuilder.create();
 
-        scheduler.execute(() -> {
-            boolean thingReachable = false; // <background task with long running initialization here>
-            // Make a login attempt to see if defined account and server are working.
-            // when done do:
-            CloseableHttpClient httpclient = HttpClients.createDefault();
-            try {
-                HttpPost httpPost = new HttpPost("https://server.growatt.com/LoginAPI.do");
-                List<NameValuePair> nvps = new ArrayList<>();
-                nvps.add(new BasicNameValuePair("userName", "AntonJansen"));
-                nvps.add(new BasicNameValuePair("password", "1a36591bceec49c832c79e27cd7e8b73"));
-                httpPost.setEntity(new UrlEncodedFormEntity(nvps));
-                CloseableHttpResponse response = httpclient.execute(httpPost);
+        try {
+            httpClient.start();
 
+            scheduler.execute(() -> {
+                boolean thingReachable = false; // <background task with long running initialization here>
+                // Make a login attempt to see if defined account and server are working.
                 try {
-                    logger.debug(response.getStatusLine().toString());
-                    HttpEntity entity2 = response.getEntity();
-                    // do something useful with the response body
-                    // and ensure it is fully consumed
-                    EntityUtils.consume(entity2);
-                } catch (IOException e) {
-                    logger.error("Unexpected io exception while logging in.", e);
-                } finally {
-                    response.close();
+
+                    Fields fields = new Fields();
+                    fields.add("userName", accountBridgeConfig.getUsername());
+                    String password = DigestUtils.md5Hex(accountBridgeConfig.getPassword());
+                    // Do the little password trick, replace all zeroes with a c
+                    password = password.replaceAll("0", "c");
+                    fields.add("password", password);
+
+                    ContentResponse response = httpClient
+                            .POST("https://" + accountBridgeConfig.getServer() + "/LoginAPI.do")
+                            .content(new FormContentProvider(fields)).send();
+                    logger.debug("response: " + response.getStatus());
+                    logger.debug("headers: " + response.getHeaders());
+                    logger.debug("content: " + response.getContentAsString());
+
+                    GenericResponse resp = gson.fromJson(response.getContentAsString(), GenericResponse.class);
+                    logger.debug("Received JSON response: " + gson.toJson(resp));
+
+                    if ((response.getStatus() == 200) && (resp.back.success)) {
+                        Map<String, String> properties = editProperties();
+                        properties.put("User ID", "" + resp.back.userId);
+                        logger.debug("Properties: ");
+                        for (String key : properties.keySet()) {
+                            logger.debug(key);
+                        }
+                        updateProperties(properties);
+                        thingReachable = true;
+                    } else {
+                        thingReachable = false;
+                    }
+
+                } catch (InterruptedException | TimeoutException | ExecutionException e) {
+                    logger.error("Cannot make login request.", e);
                 }
+                // when done do:
 
                 if (thingReachable) {
                     updateStatus(ThingStatus.ONLINE);
                 } else {
                     updateStatus(ThingStatus.OFFLINE);
                 }
+            });
+        } catch (Exception ex) {
+            logger.error("Unexpected error during initialization of account bridge.", ex);
+        }
+    }
 
-            } catch (UnsupportedEncodingException e) {
+    @Override
+    public void dispose() {
+        if (httpClient != null) {
+            try {
+                logger.debug("Stopping httpClient....");
+                httpClient.stop();
+                logger.debug("httpClient stopped.");
+            } catch (Exception e) {
                 // TODO Auto-generated catch block
-                e.printStackTrace();
-            } catch (IOException e) {
-
-            } finally {
-                try {
-                    httpclient.close();
-                } catch (IOException e) {
-                    // TODO Auto-generated catch block
-                    e.printStackTrace();
-                }
+                logger.debug("Cannot stop httpClient", e);
             }
-        });
+        }
     }
 
     @Override
@@ -101,7 +129,7 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
         } else if (accountBridgeConfig.getUsername() == "user") {
             configStatusMessages.add(ConfigStatusMessage.Builder.error("username")
                     .withMessageKeySuffix("Username not defined.").build());
-        } else if (accountBridgeConfig.getServer().isBlank()) {
+        } else if (accountBridgeConfig.getServer() == "") {
             configStatusMessages.add(ConfigStatusMessage.Builder.error("server name")
                     .withMessageKeySuffix("Server name hosting API not defined.").build());
         } else {

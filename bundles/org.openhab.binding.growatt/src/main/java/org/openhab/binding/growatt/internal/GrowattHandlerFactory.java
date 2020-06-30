@@ -51,7 +51,7 @@ public class GrowattHandlerFactory extends BaseThingHandlerFactory {
         ThingTypeUID thingTypeUID = thing.getThingTypeUID();
 
         if (ACCOUNT_TYPE.equals(thingTypeUID)) {
-            return new AccountBridgeHandler((Bridge) thing); // removed Bridge handler
+            return new AccountBridgeHandler((Bridge) thing);
         } else if (PLANT_TYPE.equals(thingTypeUID)) {
             return new PlantHandler(thing);
         }
