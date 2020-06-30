@@ -5,7 +5,7 @@
 	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
 
 	<!--Account bridge definition-->
-	<bridge-type id="growattBridge">
+	<bridge-type id="account">
 		<label>Growatt account bridge</label>
 		<description>The account used to act as a bridge towards the Growatt API</description>
 		<representation-property>email</representation-property>
@@ -27,7 +27,7 @@
 				<default>server.growatt.com</default></parameter></config-description>
 	</bridge-type><!--Plant item definition--><thing-type id="plant">
 		<supported-bridge-type-refs>
-			<bridge-type-ref id="growattBridge" />
+			<bridge-type-ref id="account" />
 		</supported-bridge-type-refs>
 		<label>Plant</label>
 		<description>Represents a plant, i.e. a location where power is created and/or stored.</description>
