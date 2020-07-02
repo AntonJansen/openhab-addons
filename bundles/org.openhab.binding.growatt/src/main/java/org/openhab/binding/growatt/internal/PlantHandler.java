@@ -29,6 +29,14 @@ import org.slf4j.LoggerFactory;
  * The {@link PlantHandler} is responsible for handling commands, which are
  * sent to one of the channels.
  *
+ *
+ *
+ * content: {"back":{"data":[{"plantMoneyText":"209.7 (€)","plantName":"Anton
+ * Jansen","plantId":"325704","isHaveStorage":"false","todayEnergy":"14 kWh","totalEnergy":"911.9
+ * kWh","currentPower":"424.1 W"}],"totalData":{"currentPowerSum":"424.1 W","CO2Sum":"0
+ * T","isHaveStorage":"false","eTotalMoneyText":"209.7 (€)","todayEnergySum":"14 kWh","totalEnergySum":"911.9
+ * kWh"},"success":true}}
+ *
  * @author Anton Jansen - Initial contribution
  */
 @NonNullByDefault

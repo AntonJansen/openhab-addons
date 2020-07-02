@@ -1,8 +1,6 @@
 package org.openhab.binding.growatt.internal.responsetypes;
 
-public class Login {
+public class Login extends GenericMessage {
     public int userId;
     public int userLevel;
-    public int errCode;
-    public boolean success;
 }

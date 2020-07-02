@@ -1,5 +1,6 @@
 package org.openhab.binding.growatt.internal;
 
+import java.lang.reflect.Type;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
@@ -20,11 +21,14 @@ import org.eclipse.smarthome.core.thing.ThingStatus;
 import org.eclipse.smarthome.core.thing.binding.ConfigStatusBridgeHandler;
 import org.eclipse.smarthome.core.types.Command;
 import org.openhab.binding.growatt.internal.responsetypes.GenericResponse;
+import org.openhab.binding.growatt.internal.responsetypes.Login;
+import org.openhab.binding.growatt.internal.responsetypes.PlantList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.reflect.TypeToken;
 
 public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
 
@@ -71,17 +75,31 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
                     logger.debug("headers: " + response.getHeaders());
                     logger.debug("content: " + response.getContentAsString());
 
-                    GenericResponse resp = gson.fromJson(response.getContentAsString(), GenericResponse.class);
+                    Type responseType = new TypeToken<GenericResponse<Login>>() {
+                    }.getType();
+
+                    GenericResponse<Login> resp = gson.fromJson(response.getContentAsString(), responseType);
                     logger.debug("Received JSON response: " + gson.toJson(resp));
 
                     if ((response.getStatus() == 200) && (resp.back.success)) {
                         Map<String, String> properties = editProperties();
                         properties.put("User ID", "" + resp.back.userId);
-                        logger.debug("Properties: ");
-                        for (String key : properties.keySet()) {
-                            logger.debug(key);
-                        }
                         updateProperties(properties);
+
+                        // Get the plant list
+                        ContentResponse plantResponse = httpClient
+                                .GET("https://" + accountBridgeConfig.getServer() + "/PlantListAPI.do");
+                        logger.debug("response: " + plantResponse.getStatus());
+                        logger.debug("headers: " + plantResponse.getHeaders());
+                        logger.debug("content: " + plantResponse.getContentAsString());
+
+                        responseType = new TypeToken<GenericResponse<PlantList>>() {
+                        }.getType();
+
+                        GenericResponse<PlantList> presp = gson.fromJson(plantResponse.getContentAsString(),
+                                responseType);
+                        logger.debug("Received JSON response: " + gson.toJson(presp));
+
                         thingReachable = true;
                     } else {
                         thingReachable = false;
