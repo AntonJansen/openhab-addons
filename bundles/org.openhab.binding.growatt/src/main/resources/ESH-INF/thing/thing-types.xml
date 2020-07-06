@@ -8,8 +8,19 @@
 	<bridge-type id="account">
 		<label>Growatt account bridge</label>
 		<description>The account used to act as a bridge towards the Growatt API</description>
+		<channels>
+			<channel typeId="kiloWattChannelType" id="currentPowerSum">
+				<label>Current power sum</label>
+				<description>The sum of the current power of all plants associated with this account</description></channel>
+			<channel typeId="kiloWattHourChannelType" id="todayEnergySum">
+				<label>Today energy sum</label>
+				<description>The total sum of energy produced by all plants today</description></channel>
+			<channel typeId="kiloWattHourChannelType" id="totalEnergySum">
+				<label>Total energy sum</label>
+				<description>The total sum of energy produced by all plants </description></channel>
+		</channels>
 		<properties>
-			<property name="userId">0</property>
+			<property name="User ID">0</property>
 		</properties>
 		<representation-property>userId</representation-property>
 		<config-description>
@@ -49,5 +60,20 @@
 		</properties>
 		<representation-property>plantId</representation-property>
 </thing-type>
+	<!--Definition of the channel types used-->
+    <channel-type id="kiloWattChannelType">
+		<item-type>Number:Power</item-type>
+		<kind>state</kind>
+		<label>kW</label>
+		<category>Energy</category>
+		<state pattern="%.2f %unit%" readOnly="true"></state>
+    </channel-type>
+	<channel-type id="kiloWattHourChannelType">
+		<item-type>Number:Energy</item-type>
+		<kind>state</kind>
+		<label>kWh</label>
+		<category>Energy</category>
+		<state pattern="%.2f %unit%" readOnly="true"></state>
+	</channel-type>
 
 </thing:thing-descriptions>

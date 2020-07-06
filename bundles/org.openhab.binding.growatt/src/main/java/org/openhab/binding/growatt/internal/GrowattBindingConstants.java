@@ -31,5 +31,10 @@ public class GrowattBindingConstants {
     public static final ThingTypeUID PLANT_TYPE = new ThingTypeUID(BINDING_ID, "plant");
 
     // List of all Channel ids
-    public static final String CHANNEL_1 = "channel1";
+    public static final String CHANNEL_ACCOUNT_CURRENTPOWERSUM = "currentPowerSum";
+    public static final String CHANNEL_ACCOUNT_CO2SUM = "CO2Sum";
+    public static final String CHANNEL_ACCOUNT_TODAYENERGYSUM = "todayEnergySum";
+    public static final String CHANNEL_ACCOUNT_TOTALENERGYSUM = "totalEnergySum";
+
+    public static final String CHANNEL_1 = "channel_1";
 }
