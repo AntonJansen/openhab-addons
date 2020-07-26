@@ -3,7 +3,6 @@ package org.openhab.binding.growatt.internal;
 import java.lang.reflect.Field;
 import java.lang.reflect.Type;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -16,13 +15,16 @@ import java.util.concurrent.TimeoutException;
 
 import org.apache.commons.codec.digest.DigestUtils;
 import org.eclipse.jdt.annotation.NonNull;
+import org.eclipse.jdt.annotation.Nullable;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.util.FormContentProvider;
 import org.eclipse.jetty.util.Fields;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.smarthome.config.core.status.ConfigStatusMessage;
+import org.eclipse.smarthome.core.library.types.DecimalType;
 import org.eclipse.smarthome.core.library.types.QuantityType;
+import org.eclipse.smarthome.core.library.types.StringType;
 import org.eclipse.smarthome.core.library.unit.MetricPrefix;
 import org.eclipse.smarthome.core.library.unit.SIUnits;
 import org.eclipse.smarthome.core.library.unit.SmartHomeUnits;
@@ -31,8 +33,10 @@ import org.eclipse.smarthome.core.thing.ChannelUID;
 import org.eclipse.smarthome.core.thing.ThingStatus;
 import org.eclipse.smarthome.core.thing.binding.ConfigStatusBridgeHandler;
 import org.eclipse.smarthome.core.types.Command;
+import org.openhab.binding.growatt.internal.discovery.GrowattDiscoveryService;
 import org.openhab.binding.growatt.internal.responsetypes.GenericResponse;
 import org.openhab.binding.growatt.internal.responsetypes.Login;
+import org.openhab.binding.growatt.internal.responsetypes.Plant;
 import org.openhab.binding.growatt.internal.responsetypes.PlantList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,6 +53,9 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
     private GsonBuilder gsonBuilder = null;
     private Gson gson = null;
     private ScheduledFuture<?> pollingJob;
+    private @Nullable GrowattDiscoveryService discoveryService;
+
+    private List<Plant> plantList = new ArrayList<Plant>();
 
     public AccountBridgeHandler(Bridge bridge) {
         super(bridge);
@@ -137,13 +144,19 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
                                     responseType);
                             logger.debug("Received JSON response: " + gson.toJson(presp));
 
-                            String[] fields = { "currentPowerSum", "CO2Sum", "todayEnergySum", "totalEnergySum" };
-                            List<QuantityType<?>> dataValues = getDataValues(presp.back.totalData, fields);
+                            if (!presp.back.success) {
+                                logger.warn("Cannot retrieve plant list. Error {}", presp.back.errCode);
+                                throw new RuntimeException(
+                                        "Call to plant list api returned error " + presp.back.errCode);
+                            }
 
-                            updateState(GrowattBindingConstants.CHANNEL_ACCOUNT_CURRENTPOWERSUM, dataValues.get(0));
-                            // TODO add CO2SUM
-                            updateState(GrowattBindingConstants.CHANNEL_ACCOUNT_TODAYENERGYSUM, dataValues.get(2));
-                            updateState(GrowattBindingConstants.CHANNEL_ACCOUNT_TOTALENERGYSUM, dataValues.get(3));
+                            // Update the plants in the bridge
+                            setPlants(presp.back.data);
+
+                            // Process the total data that is part of the plantlist data
+                            processTotalData(presp);
+
+                            // Process the plant data
 
                         } catch (InterruptedException | ExecutionException | TimeoutException | RuntimeException e) {
                             logger.error("Cannot get plant list", e);
@@ -155,6 +168,22 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
 
                     }
 
+                    private void processTotalData(GenericResponse<PlantList> presp)
+                            throws NoSuchFieldException, IllegalAccessException {
+                        String[] fields = { "currentPowerSum", "CO2Sum", "todayEnergySum", "totalEnergySum" };
+                        List<QuantityType<?>> dataValues = getDataValues(presp.back.totalData, fields);
+
+                        updateState(GrowattBindingConstants.CHANNEL_ACCOUNT_CURRENTPOWERSUM, dataValues.get(0));
+                        updateState(GrowattBindingConstants.CHANNEL_ACCOUNT_CO2SUM, dataValues.get(1));
+                        updateState(GrowattBindingConstants.CHANNEL_ACCOUNT_TODAYENERGYSUM, dataValues.get(2));
+                        updateState(GrowattBindingConstants.CHANNEL_ACCOUNT_TOTALENERGYSUM, dataValues.get(3));
+
+                        // Monetaire value
+                        updateMonetaireStates(presp.back.totalData, "eTotalMoneyText",
+                                GrowattBindingConstants.CHANNEL_ACCOUNT_TOTALMONEY,
+                                GrowattBindingConstants.CHANNEL_ACCOUNT_TOTALMONEYCURRENCY);
+                    }
+
                 };
                 logger.debug("Starting channel poller ....");
                 pollingJob = scheduler.scheduleAtFixedRate(runnable, 0, 30, TimeUnit.SECONDS);
@@ -163,6 +192,37 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
 
         } catch (Exception ex) {
             logger.error("Unexpected error during initialization of account bridge.", ex);
+        }
+
+    }
+
+    protected void updateMonetaireStates(Object dataObject, String objectFieldName, String channelValueName,
+            String channelCurrencyName)
+            throws NoSuchFieldException, SecurityException, IllegalArgumentException, IllegalAccessException {
+        Field field = dataObject.getClass().getDeclaredField(objectFieldName);
+        Type fieldType = field.getGenericType();
+        logger.trace("Field {} is of type {}", field, fieldType);
+        switch (fieldType.toString()) {
+            case "class java.lang.String":
+                String[] dataStrings = ((String) field.get(dataObject)).split("\\s+");
+                if (dataStrings.length != 2) {
+                    throw new NoSuchFieldException("Response data does not consist of 2 fields, but of "
+                            + dataStrings.length + " fields. For data: " + ((String) field.get(dataObject)));
+                }
+                logger.trace("Value: " + dataStrings[0]);
+
+                updateState(channelValueName, new DecimalType(dataStrings[0]));
+                logger.trace("Unit: " + dataStrings[1]);
+                if (dataStrings[1].startsWith("(") && dataStrings[1].endsWith(")")) {
+                    String currencyUnit = dataStrings[1].substring(1, dataStrings[1].length() - 1);
+                    logger.trace("Currency unit: " + currencyUnit);
+                    updateState(channelCurrencyName, new StringType(currencyUnit));
+                } else {
+                    throw new NoSuchFieldException("Cannot process monetairy unit: " + dataStrings[1]);
+                }
+                break;
+            default:
+                throw new NoSuchFieldException("Cannot process fields of type " + fieldType);
         }
 
     }
@@ -191,7 +251,7 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
             // Check if the data Object has the field
             Field field = dataObject.getClass().getDeclaredField(fieldName);
             Type fieldType = field.getGenericType();
-            logger.debug("Field {} is of type {}", field, fieldType);
+            logger.trace("Field {} is of type {}", field, fieldType);
             switch (fieldType.toString()) {
                 case "class java.lang.String":
                     String[] dataStrings = ((String) field.get(dataObject)).split("\\s+");
@@ -199,11 +259,12 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
                         throw new NoSuchFieldException("Response data does not consist of 2 fields, but of "
                                 + dataStrings.length + " fields. For data: " + ((String) field.get(dataObject)));
                     }
-                    logger.debug("Value: " + dataStrings[0]);
-                    logger.debug("Unit: " + dataStrings[1]);
+                    logger.trace("Value: " + dataStrings[0]);
+                    logger.trace("Unit: " + dataStrings[1]);
 
-                    BigDecimal value = new BigDecimal(dataStrings[0]).setScale(1, RoundingMode.HALF_UP);
-                    logger.debug("BigDecimal value: " + value);
+                    // BigDecimal value = new BigDecimal(dataStrings[0]).setScale(1, RoundingMode.HALF_UP);
+                    BigDecimal value = new BigDecimal(dataStrings[0]);
+                    logger.trace("BigDecimal value: " + value);
 
                     // Now let's find out which unit to use
                     switch (dataStrings[1]) {
@@ -230,6 +291,8 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
                             break;
                         case "T":
                             dataValue = new QuantityType<>(value, MetricPrefix.MEGA(SIUnits.GRAM));
+                            break;
+                        case "(€)":
                             break;
                         default:
                             throw new NoSuchFieldException("Unit type of " + dataStrings[1] + " is not a known type.");
@@ -273,6 +336,30 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
     public void handleCommand(ChannelUID channelUID, Command command) {
         // TODO Auto-generated method stub
         logger.debug("Handle command on channel: " + channelUID + " with command: " + command);
+
+    }
+
+    public synchronized List<Plant> getPlants() {
+        return plantList;
+    }
+
+    private synchronized void setPlants(List<Plant> plants) {
+        this.plantList = plants;
+    }
+
+    public boolean registerDiscoveryListener(GrowattDiscoveryService listener) {
+        if (discoveryService == null) {
+            discoveryService = listener;
+            getPlants().forEach(listener::addPlantDiscovery);
+            return true;
+        }
+
+        return false;
+
+    }
+
+    public void unregisterDiscoveryListener() {
+        // TODO Auto-generated method stub
 
     }
 
