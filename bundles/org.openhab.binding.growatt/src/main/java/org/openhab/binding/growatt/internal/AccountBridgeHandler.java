@@ -1,13 +1,14 @@
 package org.openhab.binding.growatt.internal;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Type;
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -25,9 +26,6 @@ import org.eclipse.smarthome.config.core.status.ConfigStatusMessage;
 import org.eclipse.smarthome.core.library.types.DecimalType;
 import org.eclipse.smarthome.core.library.types.QuantityType;
 import org.eclipse.smarthome.core.library.types.StringType;
-import org.eclipse.smarthome.core.library.unit.MetricPrefix;
-import org.eclipse.smarthome.core.library.unit.SIUnits;
-import org.eclipse.smarthome.core.library.unit.SmartHomeUnits;
 import org.eclipse.smarthome.core.thing.Bridge;
 import org.eclipse.smarthome.core.thing.ChannelUID;
 import org.eclipse.smarthome.core.thing.ThingStatus;
@@ -36,6 +34,7 @@ import org.eclipse.smarthome.core.types.Command;
 import org.openhab.binding.growatt.internal.discovery.GrowattDiscoveryService;
 import org.openhab.binding.growatt.internal.responsetypes.GenericResponse;
 import org.openhab.binding.growatt.internal.responsetypes.Login;
+import org.openhab.binding.growatt.internal.responsetypes.ParserHelper;
 import org.openhab.binding.growatt.internal.responsetypes.Plant;
 import org.openhab.binding.growatt.internal.responsetypes.PlantList;
 import org.slf4j.Logger;
@@ -54,6 +53,7 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
     private Gson gson = null;
     private ScheduledFuture<?> pollingJob;
     private @Nullable GrowattDiscoveryService discoveryService;
+    private Map<Long, PlantListener> subscribedPlants = new ConcurrentHashMap<Long, PlantListener>();
 
     private List<Plant> plantList = new ArrayList<Plant>();
 
@@ -124,6 +124,7 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
                 // Start polling job to update channel status
 
                 Runnable runnable = new Runnable() {
+
                     @Override
                     public void run() {
                         // execute some binding specific polling code
@@ -157,6 +158,7 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
                             processTotalData(presp);
 
                             // Process the plant data
+                            processPlantsData(presp.back.data);
 
                         } catch (InterruptedException | ExecutionException | TimeoutException | RuntimeException e) {
                             logger.error("Cannot get plant list", e);
@@ -168,10 +170,29 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
 
                     }
 
+                    private void processPlantsData(List<Plant> plants) {
+                        Set<Long> processedPlantIDs = new TreeSet<Long>();
+                        for (Plant plant : plants) {
+                            processedPlantIDs.add(new Long(plant.plantId));
+                            if (subscribedPlants.containsKey(new Long(plant.plantId))) {
+                                logger.debug("Processing plant with id: {}", plant.plantId);
+                                PlantListener plantListener = subscribedPlants.get(new Long(plant.plantId));
+                                plantListener.onPlantStateChange(plant);
+                            }
+                        }
+                        // Check if some plants are no longer present and should be offline
+                        Set<Long> offlinePlants = new TreeSet<Long>(subscribedPlants.keySet());
+                        offlinePlants.removeAll(processedPlantIDs);
+                        // Set none processed plants offline
+                        for (Long id : offlinePlants) {
+                            subscribedPlants.get(id).onPlantGone();
+                        }
+                    }
+
                     private void processTotalData(GenericResponse<PlantList> presp)
                             throws NoSuchFieldException, IllegalAccessException {
                         String[] fields = { "currentPowerSum", "CO2Sum", "todayEnergySum", "totalEnergySum" };
-                        List<QuantityType<?>> dataValues = getDataValues(presp.back.totalData, fields);
+                        List<QuantityType<?>> dataValues = ParserHelper.getDataValues(presp.back.totalData, fields);
 
                         updateState(GrowattBindingConstants.CHANNEL_ACCOUNT_CURRENTPOWERSUM, dataValues.get(0));
                         updateState(GrowattBindingConstants.CHANNEL_ACCOUNT_CO2SUM, dataValues.get(1));
@@ -179,9 +200,12 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
                         updateState(GrowattBindingConstants.CHANNEL_ACCOUNT_TOTALENERGYSUM, dataValues.get(3));
 
                         // Monetaire value
-                        updateMonetaireStates(presp.back.totalData, "eTotalMoneyText",
-                                GrowattBindingConstants.CHANNEL_ACCOUNT_TOTALMONEY,
-                                GrowattBindingConstants.CHANNEL_ACCOUNT_TOTALMONEYCURRENCY);
+                        Map<DecimalType, StringType> monValues = ParserHelper.getMonetaireValue(presp.back.totalData,
+                                "eTotalMoneyText");
+                        monValues.forEach((k, v) -> {
+                            updateState(GrowattBindingConstants.CHANNEL_ACCOUNT_TOTALMONEY, k);
+                            updateState(GrowattBindingConstants.CHANNEL_ACCOUNT_TOTALMONEYCURRENCY, v);
+                        });
                     }
 
                 };
@@ -196,39 +220,11 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
 
     }
 
-    protected void updateMonetaireStates(Object dataObject, String objectFieldName, String channelValueName,
-            String channelCurrencyName)
-            throws NoSuchFieldException, SecurityException, IllegalArgumentException, IllegalAccessException {
-        Field field = dataObject.getClass().getDeclaredField(objectFieldName);
-        Type fieldType = field.getGenericType();
-        logger.trace("Field {} is of type {}", field, fieldType);
-        switch (fieldType.toString()) {
-            case "class java.lang.String":
-                String[] dataStrings = ((String) field.get(dataObject)).split("\\s+");
-                if (dataStrings.length != 2) {
-                    throw new NoSuchFieldException("Response data does not consist of 2 fields, but of "
-                            + dataStrings.length + " fields. For data: " + ((String) field.get(dataObject)));
-                }
-                logger.trace("Value: " + dataStrings[0]);
-
-                updateState(channelValueName, new DecimalType(dataStrings[0]));
-                logger.trace("Unit: " + dataStrings[1]);
-                if (dataStrings[1].startsWith("(") && dataStrings[1].endsWith(")")) {
-                    String currencyUnit = dataStrings[1].substring(1, dataStrings[1].length() - 1);
-                    logger.trace("Currency unit: " + currencyUnit);
-                    updateState(channelCurrencyName, new StringType(currencyUnit));
-                } else {
-                    throw new NoSuchFieldException("Cannot process monetairy unit: " + dataStrings[1]);
-                }
-                break;
-            default:
-                throw new NoSuchFieldException("Cannot process fields of type " + fieldType);
-        }
-
-    }
-
     @Override
     public void dispose() {
+        pollingJob.cancel(true);
+        logger.debug("Polling job stopped.");
+
         if (httpClient != null) {
             try {
                 logger.debug("Stopping httpClient....");
@@ -238,76 +234,7 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
                 logger.debug("Cannot stop httpClient", e);
             }
         }
-        pollingJob.cancel(true);
-    }
 
-    private List<QuantityType<?>> getDataValues(Object dataObject, String[] fieldNames)
-            throws NoSuchFieldException, SecurityException, IllegalArgumentException, IllegalAccessException {
-        List<QuantityType<?>> result = new ArrayList<QuantityType<?>>();
-        @NonNull
-        QuantityType<?> dataValue = new QuantityType<>();
-
-        for (String fieldName : fieldNames) {
-            // Check if the data Object has the field
-            Field field = dataObject.getClass().getDeclaredField(fieldName);
-            Type fieldType = field.getGenericType();
-            logger.trace("Field {} is of type {}", field, fieldType);
-            switch (fieldType.toString()) {
-                case "class java.lang.String":
-                    String[] dataStrings = ((String) field.get(dataObject)).split("\\s+");
-                    if (dataStrings.length != 2) {
-                        throw new NoSuchFieldException("Response data does not consist of 2 fields, but of "
-                                + dataStrings.length + " fields. For data: " + ((String) field.get(dataObject)));
-                    }
-                    logger.trace("Value: " + dataStrings[0]);
-                    logger.trace("Unit: " + dataStrings[1]);
-
-                    // BigDecimal value = new BigDecimal(dataStrings[0]).setScale(1, RoundingMode.HALF_UP);
-                    BigDecimal value = new BigDecimal(dataStrings[0]);
-                    logger.trace("BigDecimal value: " + value);
-
-                    // Now let's find out which unit to use
-                    switch (dataStrings[1]) {
-                        case "W":
-                            dataValue = new QuantityType<>(value, SmartHomeUnits.WATT);
-                            break;
-                        case "kW":
-                            dataValue = new QuantityType<>(value, MetricPrefix.KILO(SmartHomeUnits.WATT));
-                            break;
-                        case "MW":
-                            dataValue = new QuantityType<>(value, MetricPrefix.MEGA(SmartHomeUnits.WATT));
-                            break;
-                        case "Wh":
-                            dataValue = new QuantityType<>(value, SmartHomeUnits.WATT_HOUR);
-                            break;
-                        case "kWh":
-                            dataValue = new QuantityType<>(value, SmartHomeUnits.KILOWATT_HOUR);
-                            break;
-                        case "MWh":
-                            dataValue = new QuantityType<>(value, SmartHomeUnits.MEGAWATT_HOUR);
-                            break;
-                        case "GWh":
-                            dataValue = new QuantityType<>(value, MetricPrefix.GIGA(SmartHomeUnits.WATT_HOUR));
-                            break;
-                        case "T":
-                            dataValue = new QuantityType<>(value, MetricPrefix.MEGA(SIUnits.GRAM));
-                            break;
-                        case "(€)":
-                            break;
-                        default:
-                            throw new NoSuchFieldException("Unit type of " + dataStrings[1] + " is not a known type.");
-                    } // End of unit switch
-                    break; // End of string value
-                default:
-                    throw new NoSuchFieldException("Cannot process fields of type " + fieldType);
-            }
-
-            // add the created QuantityType to the list
-            result.add(dataValue);
-
-        }
-
-        return result;
     }
 
     @Override
@@ -359,8 +286,18 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
     }
 
     public void unregisterDiscoveryListener() {
-        // TODO Auto-generated method stub
+        discoveryService = null;
+    }
 
+    public void registerPlantStatusListener(PlantListener plantListener) {
+        logger.debug("Registering plant status listener {}", plantListener.getPlantId());
+        subscribedPlants.put(plantListener.getPlantId(), plantListener);
+
+    }
+
+    public void deregisterPlantStatusListener(PlantListener plantListener) {
+        logger.debug("De-Registering plant status listener {}", plantListener.getPlantId());
+        subscribedPlants.remove(plantListener.getPlantId());
     }
 
 }

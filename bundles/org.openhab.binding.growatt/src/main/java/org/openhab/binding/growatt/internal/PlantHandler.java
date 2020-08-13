@@ -14,14 +14,23 @@ package org.openhab.binding.growatt.internal;
 
 import static org.openhab.binding.growatt.internal.GrowattBindingConstants.CHANNEL_1;
 
+import java.util.List;
+import java.util.Map;
+
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.eclipse.smarthome.core.library.types.DecimalType;
+import org.eclipse.smarthome.core.library.types.QuantityType;
+import org.eclipse.smarthome.core.library.types.StringType;
+import org.eclipse.smarthome.core.thing.Bridge;
 import org.eclipse.smarthome.core.thing.ChannelUID;
 import org.eclipse.smarthome.core.thing.Thing;
 import org.eclipse.smarthome.core.thing.ThingStatus;
 import org.eclipse.smarthome.core.thing.binding.BaseThingHandler;
 import org.eclipse.smarthome.core.types.Command;
 import org.eclipse.smarthome.core.types.RefreshType;
+import org.openhab.binding.growatt.internal.responsetypes.ParserHelper;
+import org.openhab.binding.growatt.internal.responsetypes.Plant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,7 +49,7 @@ import org.slf4j.LoggerFactory;
  * @author Anton Jansen - Initial contribution
  */
 @NonNullByDefault
-public class PlantHandler extends BaseThingHandler {
+public class PlantHandler extends BaseThingHandler implements PlantListener {
 
     private final Logger logger = LoggerFactory.getLogger(PlantHandler.class);
 
@@ -69,8 +78,23 @@ public class PlantHandler extends BaseThingHandler {
 
     @Override
     public void initialize() {
-        logger.debug("Start initializing!");
+        logger.debug("Start plant initializing!");
         config = getConfigAs(PlantConfiguration.class);
+        updateStatus(ThingStatus.OFFLINE);
+
+        // Register Plant with bridge, which will update the state once more information becomes available.
+        Bridge bridge = getBridge();
+        if ((bridge != null) && (bridge.getHandler() instanceof AccountBridgeHandler)) {
+            AccountBridgeHandler accountBridgeHandler = (AccountBridgeHandler) bridge.getHandler();
+            if (accountBridgeHandler != null) {
+                accountBridgeHandler.registerPlantStatusListener(this);
+            } else {
+                logger.error("Handler not defined for bridge.");
+            }
+        } else {
+            logger.error("Bridge is not right of the type. Found {} , expected AccountBridgeHandler",
+                    bridge.getClass().getCanonicalName());
+        }
 
         // TODO: Initialize the handler.
         // The framework requires you to return from this method quickly. Also, before leaving this method a thing
@@ -83,18 +107,8 @@ public class PlantHandler extends BaseThingHandler {
         // set the thing status to UNKNOWN temporarily and let the background task decide for the real status.
         // the framework is then able to reuse the resources from the thing handler initialization.
         // we set this upfront to reliably check status updates in unit tests.
-        updateStatus(ThingStatus.UNKNOWN);
 
         // Example for background initialization:
-        scheduler.execute(() -> {
-            boolean thingReachable = true; // <background task with long running initialization here>
-            // when done do:
-            if (thingReachable) {
-                updateStatus(ThingStatus.ONLINE);
-            } else {
-                updateStatus(ThingStatus.OFFLINE);
-            }
-        });
 
         logger.debug("Finished initializing!");
 
@@ -103,5 +117,61 @@ public class PlantHandler extends BaseThingHandler {
         // Add a description to give user information to understand why thing does not work as expected. E.g.
         // updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
         // "Can not access device as username and/or password are invalid");
+    }
+
+    @Override
+    public void dispose() {
+        logger.debug("Disposing plant handler for plant {}", getThing().getUID());
+        Bridge bridge = getBridge();
+        if ((bridge != null) && (bridge.getHandler() instanceof AccountBridgeHandler)) {
+            AccountBridgeHandler accountBridgeHandler = (AccountBridgeHandler) bridge.getHandler();
+            if (accountBridgeHandler != null) {
+                accountBridgeHandler.deregisterPlantStatusListener(this);
+            } else {
+                logger.error("No handler for bridge found.");
+            }
+        } else {
+            logger.error("Bridge is not right of the type.");
+        }
+    }
+
+    @Override
+    public Long getPlantId() {
+        return Long.parseLong(getThing().getUID().getId());
+    }
+
+    @Override
+    public void onPlantGone() {
+        logger.debug("Plant {} is no longer available.", getPlantId());
+        updateStatus(ThingStatus.OFFLINE);
+    }
+
+    @Override
+    public void onPlantStateChange(Plant plant) {
+        updateStatus(ThingStatus.ONLINE);
+        logger.debug("New state for plant {}", getPlantId());
+        String[] fields = { "todayEnergy", "totalEnergy", "currentPower" };
+        List<QuantityType<?>> dataValues;
+        try {
+            dataValues = ParserHelper.getDataValues(plant, fields);
+            updateState(GrowattBindingConstants.CHANNEL_PLANT_TODAYENERGY, dataValues.get(0));
+            updateState(GrowattBindingConstants.CHANNEL_PLANT_TOTALENERGY, dataValues.get(1));
+            updateState(GrowattBindingConstants.CHANNEL_PLANT_CURRENTPOWER, dataValues.get(2));
+
+        } catch (NoSuchFieldException | SecurityException | IllegalArgumentException | IllegalAccessException e) {
+            logger.error("Cannot parse plant data for plant " + getPlantId(), e);
+        }
+
+        // Monetaire value
+        try {
+            Map<DecimalType, StringType> monValues = ParserHelper.getMonetaireValue(plant, "plantMoneyText");
+            monValues.forEach((k, v) -> {
+                updateState(GrowattBindingConstants.CHANNEL_PLANT_TOTALMONEY, k);
+                updateState(GrowattBindingConstants.CHANNEL_PLANT_TOTALMONEYCURRENCY, v);
+            });
+        } catch (NoSuchFieldException | SecurityException | IllegalArgumentException | IllegalAccessException e) {
+            logger.error("Cannot parse plant money data for plant " + getPlantId(), e);
+        }
+
     }
 }
