@@ -20,6 +20,7 @@ import org.eclipse.jdt.annotation.Nullable;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.util.FormContentProvider;
+import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.util.Fields;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.smarthome.config.core.status.ConfigStatusMessage;
@@ -42,6 +43,8 @@ import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
 
 public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
@@ -159,6 +162,21 @@ public class AccountBridgeHandler extends ConfigStatusBridgeHandler {
 
                             // Process the plant data
                             processPlantsData(presp.back.data);
+
+                            String plantDetailURL = "https://" + accountBridgeConfig.getServer() + "/newTwoPlantAPI.do";
+
+                            ContentResponse plantDetailResponse = httpClient.newRequest(plantDetailURL)
+                                    .method(HttpMethod.GET).param("op", "getAllDeviceList").param("plantId", "325704")
+                                    .send();
+
+                            logger.debug("response: " + plantDetailResponse.getStatus());
+                            logger.debug("headers: " + plantDetailResponse.getHeaders());
+                            logger.debug("content: " + plantDetailResponse.getContentAsString());
+
+                            JsonParser jp = new JsonParser();
+                            JsonElement je = jp.parse(plantDetailResponse.getContentAsString());
+
+                            logger.debug("JSON content:\n" + gson.toJson(je));
 
                         } catch (InterruptedException | ExecutionException | TimeoutException | RuntimeException e) {
                             logger.error("Cannot get plant list", e);
