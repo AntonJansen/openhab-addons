@@ -16,7 +16,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.openhab.binding.broadlink.BroadlinkBindingConstants;
+import org.openhab.binding.broadlink.internal.BroadlinkBindingConstants;
 import org.openhab.binding.broadlink.internal.socket.BroadlinkSocketListener;
 import org.openhab.core.config.discovery.AbstractDiscoveryService;
 import org.openhab.core.config.discovery.DiscoveryResult;
@@ -48,21 +48,19 @@ public class BroadlinkDiscoveryService extends AbstractDiscoveryService
         logger.debug("BroadlinkDiscoveryService - Constructed");
     }
 
+    @Override
     public void startScan() {
         foundCount = 0;
-        logger.warn("BroadlinkDiscoveryService - Beginning Broadlink device scan...");
         DiscoveryProtocol.beginAsync(this, 10000L, this, logger);
     }
 
-    public void onDiscoveryFinished() {
-        logger.info("Discovery complete. Found {} Broadlink devices", foundCount);
-    }
-
+    @Override
     protected synchronized void stopScan() {
         super.stopScan();
         removeOlderResults(getTimestampOfLastScan());
     }
 
+    @Override
     public void onDataReceived(String remoteAddress, int remotePort, String remoteMAC, ThingTypeUID thingTypeUID,
             int model) {
         logger.trace("Data received during Broadlink device discovery: from {}:{} [{}]", remoteAddress, remotePort,
@@ -91,7 +89,7 @@ public class BroadlinkDiscoveryService extends AbstractDiscoveryService
         if (BroadlinkBindingConstants.SUPPORTED_THING_TYPES_UIDS_TO_NAME_MAP.containsKey(thingTypeUID)) {
             notifyThingDiscovered(thingTypeUID, thingUID, remoteAddress, properties);
         } else {
-            logger.info("Discovered a {} but do not know how to support it at this time :-(", thingTypeUID);
+            logger.warn("Discovered a {} but do not know how to support it at this time, please report!", thingTypeUID);
         }
     }
 
@@ -104,5 +102,10 @@ public class BroadlinkDiscoveryService extends AbstractDiscoveryService
                 .build();
 
         thingDiscovered(result);
+    }
+
+    @Override
+    public void onDiscoveryFinished() {
+        logger.info("Discovery complete. Found {} Broadlink devices", foundCount);
     }
 }

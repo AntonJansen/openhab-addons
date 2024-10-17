@@ -13,7 +13,6 @@
 package org.openhab.binding.broadlink.internal;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.openhab.binding.broadlink.BroadlinkBindingConstants;
 import org.openhab.core.library.types.StringType;
 import org.openhab.core.thing.ThingTypeUID;
 import org.slf4j.Logger;
@@ -72,6 +71,7 @@ public class ModelMapper {
             case 0x27D0:
             case 0x27D1:
             case 0x27D3:
+            case 0x27DC:
             case 0x27DE:
                 return BroadlinkBindingConstants.THING_TYPE_RM3;
             case 0x2712:
@@ -87,11 +87,18 @@ public class ModelMapper {
             case 0x27A6:
             case 0x27A9:
             case 0x27C3:
-                return BroadlinkBindingConstants.THING_TYPE_RM2;
+                return BroadlinkBindingConstants.THING_TYPE_RM_PRO;
             case 0x5F36:
+            case 0x6507:
             case 0x6508:
                 return BroadlinkBindingConstants.THING_TYPE_RM3Q;
             case 0x51DA:
+            case 0x5209:
+            case 0x520C:
+            case 0x520D:
+            case 0x5211:
+            case 0x5212:
+            case 0x5216:
             case 0x6070:
             case 0x610E:
             case 0x610F:
@@ -101,11 +108,16 @@ public class ModelMapper {
             case 0x648D:
             case 0x6539:
             case 0x653A:
+                return BroadlinkBindingConstants.THING_TYPE_RM4_MINI;
+            case 0x520B:
+            case 0x5213:
+            case 0x5218:
             case 0x6026:
+            case 0x6184:
             case 0x61A2:
             case 0x649B:
             case 0x653C:
-                return BroadlinkBindingConstants.THING_TYPE_RM4;
+                return BroadlinkBindingConstants.THING_TYPE_RM4_PRO;
             case 0x2714:
                 return BroadlinkBindingConstants.THING_TYPE_A1;
             case 0x4EB5:
@@ -118,41 +130,47 @@ public class ModelMapper {
                 logger.warn(
                         "Device identifying itself as '{}' (0x{}) is not currently supported. Please report this to the developer!",
                         model, modelAsHexString);
-                logger.warn(
-                        "Join the discussion at https://community.openhab.org/t/broadlink-binding-for-rmx-a1-spx-and-mp-any-interest/22768/616");
                 throw new UnsupportedOperationException("Device identifying itself as '" + model + "' (hex 0x"
                         + modelAsHexString + ") is not currently supported. Please report this to the developer!");
             }
         }
     }
 
-    private static StringType lookup(StringType[] values, byte b) {
+    private static <T extends Enum<T>> StringType lookup(T[] values, byte b) {
         int index = Byte.toUnsignedInt(b);
-        if (index < values.length) {
-            return values[index];
-        } else {
-            return UNKNOWN;
-        }
+        return index < values.length ? new StringType(values[index].toString()) : UNKNOWN;
     }
 
-    private static final StringType[] AIR_VALUES = { new StringType("PERFECT"), new StringType("GOOD"),
-            new StringType("NORMAL"), new StringType("BAD") };
+    private enum AirValue {
+        PERFECT,
+        GOOD,
+        NORMAL,
+        BAD
+    }
 
     public static StringType getAirValue(byte b) {
-        return lookup(AIR_VALUES, b);
+        return lookup(AirValue.values(), b);
     }
 
-    private static final StringType[] LIGHT_VALUES = { new StringType("DARK"), new StringType("DIM"),
-            new StringType("NORMAL"), new StringType("BRIGHT") };
+    private enum LightValues {
+        DARK,
+        DIM,
+        NORMAL,
+        BRIGHT
+    }
 
     public static StringType getLightValue(byte b) {
-        return lookup(LIGHT_VALUES, b);
+        return lookup(LightValues.values(), b);
     }
 
-    private static final StringType[] NOISE_VALUES = { new StringType("QUIET"), new StringType("NORMAL"),
-            new StringType("NOISY"), new StringType("EXTREME") };
+    private enum NoiseValues {
+        QUIET,
+        NORMAL,
+        NOISY,
+        EXTREME
+    }
 
     public static StringType getNoiseValue(byte b) {
-        return lookup(NOISE_VALUES, b);
+        return lookup(NoiseValues.values(), b);
     }
 }

@@ -21,7 +21,7 @@ import java.net.SocketTimeoutException;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.binding.broadlink.config.BroadlinkDeviceConfiguration;
+import org.openhab.binding.broadlink.internal.config.BroadlinkDeviceConfiguration;
 import org.slf4j.Logger;
 
 /**
@@ -68,55 +68,50 @@ public class RetryableSocket {
         return null;
     }
 
-    @SuppressWarnings("null")
     private boolean sendDatagram(byte message[], String purpose) {
         try {
-            logger.trace("Sending {} to {}:{}", purpose, thingConfig.getIpAddress(), thingConfig.getPort());
+            DatagramSocket socket = this.socket;
             if (socket == null || socket.isClosed()) {
-                logger.trace("No existing socket ... creating");
                 socket = new DatagramSocket();
                 socket.setBroadcast(true);
                 socket.setReuseAddress(true);
                 socket.setSoTimeout(5000);
+                this.socket = socket;
             }
             InetAddress host = InetAddress.getByName(thingConfig.getIpAddress());
             int port = thingConfig.getPort();
             DatagramPacket sendPacket = new DatagramPacket(message, message.length, new InetSocketAddress(host, port));
             socket.send(sendPacket);
-            logger.trace("Sending {} complete", purpose);
             return true;
         } catch (IOException e) {
-            logger.warn("IO error during UDP command sending {}:", purpose, e);
+            logger.warn("IO error during UDP command sending {}:{}", purpose, e.getMessage());
             return false;
         }
     }
 
-    @SuppressWarnings("null")
     private @Nullable DatagramPacket receiveDatagram(String purpose, DatagramPacket receivePacket) {
-        logger.trace("Awaiting {} response", purpose);
-
+        DatagramSocket socket = this.socket;
         try {
             if (socket == null) {
                 logger.warn("receiveDatagram {} for socket was unexpectedly null", purpose);
             } else {
                 socket.receive(receivePacket);
-                logger.trace("Received {} ({} bytes)", purpose, receivePacket.getLength());
                 return receivePacket;
             }
         } catch (SocketTimeoutException ste) {
             logger.debug("No further {} response received for device", purpose);
         } catch (Exception e) {
-            logger.warn("While {}", purpose, e);
+            logger.warn("While {} got unexpected exception: {}", purpose, e.getMessage());
         }
 
         return null;
     }
 
-    @SuppressWarnings("null")
     public void close() {
+        DatagramSocket socket = this.socket;
         if (socket != null) {
             socket.close();
-            socket = null;
+            this.socket = null;
         }
     }
 }

@@ -13,7 +13,7 @@
 package org.openhab.binding.broadlink.internal.discovery;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.openhab.binding.broadlink.config.BroadlinkDeviceConfiguration;
+import org.openhab.binding.broadlink.internal.config.BroadlinkDeviceConfiguration;
 import org.openhab.binding.broadlink.internal.socket.BroadlinkSocketListener;
 import org.openhab.core.thing.ThingTypeUID;
 import org.slf4j.Logger;
@@ -44,7 +44,7 @@ public class DeviceRediscoveryAgent implements BroadlinkSocketListener, Discover
     }
 
     public void attemptRediscovery() {
-        logger.warn("DeviceRediscoveryAgent - Beginning Broadlink device scan for missing {}",
+        logger.debug("DeviceRediscoveryAgent - Beginning Broadlink device scan for missing {}",
                 missingThingConfig.toString());
         DiscoveryProtocol.beginAsync(this, 5000L, this, logger);
     }
