@@ -12,14 +12,14 @@ This binding supports a range of home networking devices made by (and occasional
 | mp2        | Broadlink MP2 WiFi Smart Power Strip (3 sockets, 3 USB)                       |
 | sp1        | Broadlink SP1 WiFi Smart Socket                                               |
 | sp2        | Broadlink SP2 WiFi Smart Socket with night light                              |
-| sp2s       | OEM SP2 Mini WiFi Smart Socket with night light                               |
+| sp2-s      | OEM SP2 Mini WiFi Smart Socket with night light                               |
 | sp3        | Broadlink SP3/Mini WiFi Smart Socket with night light                         |
-| sp3s       | Broadlink SP3s WiFi Smart Socket with Power Meter                             |
+| sp3-s      | Broadlink SP3s WiFi Smart Socket with Power Meter                             |
 | rm-pro     | Broadline RM Pro WiFi IR/RF Transmitter with temperature sensor               |
 | rm3        | Broadlink RM3/Mini WiFi IR Transmitter                                        |
-| rm3q       | Broadlink RM3 WiFi IR Transmitter with Firmware v44057                        |
-| rm4pro     | Broadlink RM4 Pro WiFi RF/IR Transmitter with temperature and humidity sensors|
-| rm4mini    | Broadlink RM4 mini WiFi IR Transmitter                                        |
+| rm3-q      | Broadlink RM3 WiFi IR Transmitter with Firmware v44057                        |
+| rm4-pro    | Broadlink RM4 Pro WiFi RF/IR Transmitter with temperature and humidity sensors|
+| rm4-mini   | Broadlink RM4 mini WiFi IR Transmitter                                        |
 
 ## Discovery
 
@@ -86,7 +86,7 @@ The binding is also capable of modifying a previously stored code, and to delete
 
 To modify a previously stored code, the procedure is the same as the one shown above, except that in step 4, the option to choose is *Modify IR command* or *Modify RF Command*
 
-*Please note that the "Learn command" will not modify a previously existent code, and the "Modify" command will not create a new command. 
+*Please note that the "Learn command" will not modify a previously existent code, and the "Modify" command will not create a new command.
 This is done to avoid accidentally overwriting commands*
 
 In order to delete a previously stored code, the procedure is as follows:
@@ -112,7 +112,55 @@ Items file example; `sockets.items`:
 Switch BroadlinkSP3 "Christmas Lights" [ "Lighting" ] { channel="broadlink:sp3:34-ea-34-22-44-66:power-on" } 
 ```
 
-## Migrating legacy map file
+
+Thing file example; `rm.things`:
+
+```java
+Thing broadlink:rm4pro:IR_Downstairs "RM 4 Pro IR controller"  [ macAddress="e8:16:56:1c:7e:b9", ipAddress="192.168.178.234" ]
+Thing broadlink:rm3q:IR_Upstairs "RM 3 IR controller"  [ macAddress="24:df:a7:df:0d:53", ipAddress="192.168.178.232" ]
+```
+
+Items file example; `rm.items`:
+
+```java
+Switch DownstairsAC
+
+Number:Temperature DownstairsTemperature "Temperature downstairs" <temperature> ["Temperature", "Measurement"] { channel="broadlink:rm4pro:IR_Downstairs:temperature", unit="°C", stateDescription=" " [pattern="%.1f %unit%"]} 
+Number:Dimensionless DownstairsHumidity "Humidity downstairs" <humidity> { channel="broadlink:rm4pro:IR_Downstairs:humidity", unit="%" }
+
+String IR_Downstairs "Downstairs IR control" { channel="broadlink:rm4pro:IR_Downstairs:command" }
+```
+
+Rule file example; `AC.rules`:
+
+```java
+rule " AC_Control started"
+when
+  System started
+then
+  DownstairsAC.sendCommand(OFF)
+  IR_Downstairs.sendCommand("AC_OFF")
+end
+
+rule "Downstairs AC Off"
+when
+  Item DownstairsAC changed to OFF
+then
+  IR_Downstairs.sendCommand("AC_OFF")
+end
+
+rule "Downstairs AC On"
+when
+  Item DownstairsAC changed to ON
+then
+  IR_Downstairs.sendCommand("AC_ON")
+end
+```
+
+This rule file assumes you previously have learned the "AC_ON" and "AC_OFF" IR commands.
+
+
+## Migrating Legacy Map File
 
 Up to openHAB version 3.3, there was a previous version of this binding that was not part of the openHAB distribution.
 It stored the IR/RF commands in a different place and a different format.
@@ -184,4 +232,4 @@ else:
 
 - [Cato Sognen](https://community.openhab.org/u/cato_sognen)
 - [JAD](http://www.javadecompilers.com/jad) (Java Decompiler)
-- [Ricardo] (ricardol)
+- [Ricardo] (https://github.com/rlarranaga)

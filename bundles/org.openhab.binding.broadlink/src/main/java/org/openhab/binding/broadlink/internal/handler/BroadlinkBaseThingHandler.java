@@ -97,7 +97,7 @@ public abstract class BroadlinkBaseThingHandler extends BaseThingHandler impleme
         updateStatus(ThingStatus.UNKNOWN);
         this.thingConfig = getConfigAs(BroadlinkDeviceConfiguration.class);
         // Validate whether the configuration makes any sense
-        if (thingConfig.isValidConfiguration().length() != 0) {
+        if (thingConfig.isValidConfiguration().isEmpty()) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
                     thingConfig.isValidConfiguration());
             return;
@@ -109,12 +109,8 @@ public abstract class BroadlinkBaseThingHandler extends BaseThingHandler impleme
         }
 
         if (thingConfig.getPollingInterval() != 0) {
-            refreshHandle = scheduler.scheduleWithFixedDelay(new Runnable() {
-                @Override
-                public void run() {
-                    updateItemStatus();
-                }
-            }, 1L, thingConfig.getPollingInterval(), TimeUnit.SECONDS);
+            refreshHandle = scheduler.scheduleWithFixedDelay(this::updateItemStatus, 1L,
+                    thingConfig.getPollingInterval(), TimeUnit.SECONDS);
         }
     }
 

@@ -19,12 +19,11 @@ import java.net.ServerSocket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeoutException;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.binding.broadlink.internal.handler.BroadlinkHostNotReachableException;
 import org.openhab.core.net.NetUtil;
-import org.slf4j.Logger;
 
 /**
  * Utilities for working with the local network.
@@ -33,25 +32,6 @@ import org.slf4j.Logger;
  */
 @NonNullByDefault
 public class NetworkUtils {
-
-    /**
-     * Check whether the host is available.
-     *
-     * @param host hostname or ip address of the host to check for availability
-     * @param timeout time in milliseconds for the check to timeout
-     * @param logger the logger to use for logging any issues
-     * @throws IOException if there is an unexpected error
-     * @throws BroadlinkHostNotReachableException when the device is not responding
-     */
-
-    public static void hostAvailabilityCheck(@Nullable String host, int timeout, Logger logger)
-            throws IOException, BroadlinkHostNotReachableException {
-        InetAddress address = InetAddress.getByName(host);
-        if (!address.isReachable(timeout)) {
-            throw new BroadlinkHostNotReachableException("Cannot reach " + host);
-        }
-    }
-
     /**
      * Finds an InetAddress that is associated to a non-loopback device.
      *
@@ -103,14 +83,22 @@ public class NetworkUtils {
      * @param from port number of the start of the range
      * @param to port number of the end of the range
      * @return number of the available port
+     * @throws TimeoutException when no available port can be found in 30 seconds
      */
-    public static int nextFreePort(InetAddress host, int from, int to) {
+    public static int nextFreePort(InetAddress host, int from, int to) throws TimeoutException {
+        if (to < from) {
+            throw new IllegalArgumentException("To value is smaller than from value.");
+        }
         int port = randInt(from, to);
+        long startTime = System.currentTimeMillis();
         do {
             if (isLocalPortFree(host, port)) {
                 return port;
             }
             port = ThreadLocalRandom.current().nextInt(from, to);
+            if (System.currentTimeMillis() - startTime > 30000) {
+                throw new TimeoutException("Cannot find an available port in the specified range");
+            }
         } while (true);
     }
 
